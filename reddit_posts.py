@@ -9,6 +9,25 @@ import argparse
 # Global dictionary to store the collected data
 data_dict = {}
 
+
+def stampToDateObj(t):
+  return datetime.fromtimestamp(t)
+
+
+def dateToStamp(d):
+  return datetime.timestamp(d)
+
+
+def initDataDict():
+  '''
+  Initilize the variable which stores the collected data
+  * This is where you modify what data to be collected
+  '''
+  fields_of_interest = ['post_id', 'title', 'author', 'text', 'date', 'time', 'score', 'comm', 'url', 'stamp', 'remove_reason']
+  for f in fields_of_interest:
+    data_dict[f] = []
+
+
 def getPostPushshiftData(subreddit, query, after, before, size):
   '''
   Build the URL used to scrape 'size' submissions/posts from a specific 'subreddit'
@@ -20,11 +39,23 @@ def getPostPushshiftData(subreddit, query, after, before, size):
 
   print("Requesting data from URL: \n", url)
   #Request URL
-  r = requests.get(url)
-  #Load JSON data from webpage into data variable
-  data = json.loads(r.text)
-  #return the data element which contains all the submissions/posts data
-  return data['data']
+  while True:
+    try:
+      r = requests.get(url)
+    except (requests.exceptions.ReadTimeout, requests.exceptions.ChunkedEncodingError, requests.exceptions.ConnectionError):
+      print("PushShift timeout, site is down. waiting for 5 seconds and trying again")
+      time.sleep(5)
+      continue
+    #Load JSON data from webpage into data variable
+    try:
+      data = json.loads(r.text)
+    except json.decoder.JSONDecodeError:
+      print("Decoding error, might be due to down server. Waiting 5 seconds and trying again")
+      time.sleep(5)
+      continue
+    #return the data element which contains all the submissions/posts data
+    return data['data']
+
 
 def collectSubData(subm):
   '''
@@ -52,25 +83,7 @@ def collectSubData(subm):
   data_dict['remove_reason'] = remove_reason
 
 
-def stampToDateObj(t):
-  return datetime.fromtimestamp(t)
-
-
-def dateToStamp(d):
-  return datetime.timestamp(d)
-
-
-def initDataDict():
-  '''
-  Initilize the variable which stores the collected data
-  * This is where you modify what data to be collected
-  '''
-  fields_of_interest = ['post_id', 'title', 'author', 'text', 'date', 'time', 'query', 'score', 'comm', 'url', 'stamp', 'remove_reason']
-  for f in fields_of_interest:
-    data_dict[f] = []
-
-
-def startScraping(sub, query, after, before, filename, size=10): # max:500
+def startScraping(sub, query, after, before, filename, size=500): # max:500
   '''
   Starting point of data scraping
   '''
@@ -87,13 +100,10 @@ def startScraping(sub, query, after, before, filename, size=10): # max:500
     after = data[-1]['created_utc']
     # wait 1 seconds, abiding Reddit rules (https://github.com/reddit-archive/reddit/wiki/API#rules)
     time.sleep(1)
-    break
+    #break
   
   # Show statistics
   statistics(sub, query)
-
-  # Fill in missing columns
-  fillMissingColumns(query)
 
   # Save results 
   saveResult(filename)
@@ -101,8 +111,8 @@ def startScraping(sub, query, after, before, filename, size=10): # max:500
 
 def fillMissingColumns(query):
   '''
-  To reduce processing time, the script for now look for a single query in a 
-  single subreddit, no need to keep saving them in earlier stages. 
+  To reduce processing time, you can use this method to fill in a column.
+  This is not used .. may remove soon
   '''
   # Since multiple queries will be used for this project, the field is added
   # Other fields can be added this way (for now) like subreddit name and its ID
@@ -140,7 +150,7 @@ if __name__ == '__main__':
   ap = argparse.ArgumentParser()
 
   ap.add_argument("-r", "--subreddit", required=True, help="Subreddit Name")
-  ap.add_argument("-q", "--query", required=True, help="Search term")
+  ap.add_argument("-q", "--query", required=True, help="Search term, if multiple please seperate by commas")
   #ap.add_argument("-s", "--size", required=True, type=int, help="Number of retrieved items")
   ap.add_argument("-a", "--after", required=True, help="Starting date, format: MM-DD-YYYY")
   ap.add_argument("-b", "--before", required=True, help="End date, format: MM-DD-YYYY")
@@ -170,7 +180,8 @@ if __name__ == '__main__':
   
   after = int(dateToStamp(after))
   before = int(dateToStamp(before))
+  query = args.query.replace(',', '|')
 
   print("Arguments parsed .. Start scraping data \n\n")
-  startScraping(args.subreddit, args.query, after, before, args.filename)
+  startScraping(args.subreddit, query, after, before, args.filename)
 
