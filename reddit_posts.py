@@ -18,26 +18,31 @@ def dateToStamp(d):
   return datetime.timestamp(d)
 
 
-def initDataDict():
+def initDataDict(query):
   '''
   Initilize the variable which stores the collected data
   * This is where you modify what data to be collected
   '''
-  fields_of_interest = ['post_id', 'title', 'author', 'text', 'date', 'time', 'score', 'comm', 'url', 'stamp', 'remove_reason']
+  fields_of_interest = ['post_id', 'title', 'author', 'text', 'date', 'time', 'score', 'comm', 'url', 'stamp', 'remove_reason', 'subreddit']
+  if query is not None:
+    fields_of_interest.append('query')
   for f in fields_of_interest:
     data_dict[f] = []
 
 
-def getPostPushshiftData(subreddit, query, after, before, size):
+def getPostPushshiftData(subreddit, after, before, query, size):
   '''
   Build the URL used to scrape 'size' submissions/posts from a specific 'subreddit'
-  filtered by a 'query' during a period of time ('before' and 'after')
+  filtered by an optional 'query' during a period of time ('before' and 'after')
   '''
   
   #Build PushShift URL to request data
-  url = 'https://api.pushshift.io/reddit/search/submission/?q='+str(query)+'&size='+str(size)+'&after='+str(after)+'&before='+str(before)+'&subreddit='+str(subreddit)
+  if query is not None:
+    url = 'https://api.pushshift.io/reddit/search/submission/?q='+str(query)+'&size='+str(size)+'&after='+str(after)+'&before='+str(before)+'&subreddit='+str(subreddit)
+  else:
+    url = 'https://api.pushshift.io/reddit/search/submission/?size='+str(size)+'&after='+str(after)+'&before='+str(before)+'&subreddit='+str(subreddit)
 
-  print("Requesting data from URL: \n", url)
+  #print("Requesting data from URL: \n", url)
   #Request URL
   while True:
     try:
@@ -64,33 +69,51 @@ def collectSubData(subm):
 
   global data_dict
 
-  data_dict['post_id'].append(subm['id'])
-  data_dict['title'].append(subm['title'])
-  data_dict['author'].append(subm['author'])
-  data_dict['text'].append(subm['selftext'])
-  t = subm['created_utc']
+  # clear previous data, just in case
+  id, title, auth, text, t, score, com, link, remove_reason = " " * 9
+
+  try: # to avoid script crashing 
+    id = subm['id']
+    title = subm['title']
+    auth = subm['author']
+    try:
+      text = subm['selftext']
+    except KeyError:
+      text = "[banned]"
+    t = subm['created_utc']
+    score = subm['score']
+    com = subm['num_comments']
+    link = subm['permalink']
+    try: # 'banned_by' ?? 
+        remove_reason = subm['removed_by_category']
+    except KeyError:
+        remove_reason = ""
+  except Exception:
+    print("Error in record: ", subm)
+    return
+
+  data_dict['post_id'].append(id)
+  data_dict['title'].append(title)
+  data_dict['author'].append(auth)
+  data_dict['text'].append(text)
   d = stampToDateObj(t)
   data_dict['stamp'].append(t)
   data_dict['date'].append(str(d.date()))
   data_dict['time'].append(str(d.time()))
-  data_dict['score'].append(subm['score'])
-  data_dict['comm'].append(subm['num_comments'])
-  data_dict['url'].append(subm['permalink'])
-  try:
-      remove_reason = subm['removed_by_category']
-  except KeyError:
-      remove_reason = ""
+  data_dict['score'].append(score)
+  data_dict['comm'].append(com)
+  data_dict['url'].append(link)
   data_dict['remove_reason'] = remove_reason
 
 
-def startScraping(sub, query, after, before, filename, size=500): # max:500
+def startScraping(sub, after, before, query=None, size=500): # max:500
   '''
   Starting point of data scraping
   '''
-  initDataDict()
+  initDataDict(query)
 
   while True:
-    data = getPostPushshiftData(sub, query, after, before, size)
+    data = getPostPushshiftData(sub, after, before, query, size)
     if len(data) == 0:
       print("empty data - no response")
       break
@@ -102,21 +125,23 @@ def startScraping(sub, query, after, before, filename, size=500): # max:500
     time.sleep(1)
     #break
   
+  # fill repeated columns efficiently 
+  fillMissingColumns('subreddit', sub)
+  if query is not None:
+    fillMissingColumns('query', query)
+
   # Show statistics
   statistics(sub, query)
 
-  # Save results 
-  saveResult(filename)
 
-
-def fillMissingColumns(query):
+def fillMissingColumns(col_name, col_content):
   '''
   To reduce processing time, you can use this method to fill in a column.
   This is not used .. may remove soon
   '''
   # Since multiple queries will be used for this project, the field is added
   # Other fields can be added this way (for now) like subreddit name and its ID
-  data_dict['query'] = [query] * len(data_dict['post_id'])
+  data_dict[col_name] = [col_content] * len(data_dict['post_id'])
 
 
 def statistics(sub, query):
@@ -141,8 +166,26 @@ def saveResult(filename):
   '''
 
   print("Save results in file: ", filename)
-  df = pd.DataFrame(data_dict)
-  df.to_csv(filename)
+  try:
+    df = pd.DataFrame(data_dict)
+    df.to_csv(filename + ".csv")
+    print("Data saved in " + filename + ".csv")
+    df.to_excel(filename + ".xlsx")
+    print("Data saved in " + filename + ".xlsx")
+
+    ''' # this is the proper way to save
+    if filename.endswith(".csv"):
+      df.to_csv(filename)
+    elif filename.endswith('xlsx'):
+      df.to_excel(filename)
+    else:
+      # General case .. uses csv for now
+      print("File extension is not supported, trying to save it as CSV")
+      df.to_csv(filename)
+    '''
+  except Exception as e:
+    print("Error saving data .. Message:\n", e)
+  
 
 
 if __name__ == '__main__':
@@ -150,7 +193,7 @@ if __name__ == '__main__':
   ap = argparse.ArgumentParser()
 
   ap.add_argument("-r", "--subreddit", required=True, help="Subreddit Name")
-  ap.add_argument("-q", "--query", required=True, help="Search term, if multiple please seperate by commas")
+  ap.add_argument("-q", "--query", required=False, help="Search term, if multiple please seperate by commas")
   #ap.add_argument("-s", "--size", required=True, type=int, help="Number of retrieved items")
   ap.add_argument("-a", "--after", required=True, help="Starting date, format: MM-DD-YYYY")
   ap.add_argument("-b", "--before", required=True, help="End date, format: MM-DD-YYYY")
@@ -180,8 +223,18 @@ if __name__ == '__main__':
   
   after = int(dateToStamp(after))
   before = int(dateToStamp(before))
-  query = args.query.replace(',', '|')
+  #query = str(args.query).replace(',', '|')
 
   print("Arguments parsed .. Start scraping data \n\n")
-  startScraping(args.subreddit, query, after, before, args.filename)
 
+  if args.query is not None:
+    terms = str(args.query).split(',')
+    for query in terms:
+      print("Collecting data filtered by [{}]".format(query))
+      startScraping(args.subreddit, query, after, before)
+  else:
+    print("Collecting data from [{}]".format(args.subbreddit))
+    startScraping(args.subreddit, after, before)
+
+  # Save results 
+  saveResult(args.filename)
