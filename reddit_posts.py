@@ -5,17 +5,10 @@ import csv #To Convert final table into a csv file to save to your machine
 import time
 from datetime import datetime
 import argparse
+from util import *
 
 # Global dictionary to store the collected data
 data_dict = {}
-
-
-def stampToDateObj(t):
-  return datetime.fromtimestamp(t)
-
-
-def dateToStamp(d):
-  return datetime.timestamp(d)
 
 
 def initDataDict(query):
@@ -160,33 +153,6 @@ def statistics(sub, query):
   print("*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-")
 
 
-def saveResult(filename):
-  '''
-  Saves the collected data, in form of dictionary, to a csv file
-  '''
-
-  print("Save results in file: ", filename)
-  try:
-    df = pd.DataFrame(data_dict)
-    df.to_csv(filename + ".csv")
-    print("Data saved in " + filename + ".csv")
-    df.to_excel(filename + ".xlsx")
-    print("Data saved in " + filename + ".xlsx")
-
-    ''' # this is the proper way to save
-    if filename.endswith(".csv"):
-      df.to_csv(filename)
-    elif filename.endswith('xlsx'):
-      df.to_excel(filename)
-    else:
-      # General case .. uses csv for now
-      print("File extension is not supported, trying to save it as CSV")
-      df.to_csv(filename)
-    '''
-  except Exception as e:
-    print("Error saving data .. Message:\n", e)
-  
-
 
 if __name__ == '__main__':
   # Construct the argument parser
@@ -237,4 +203,4 @@ if __name__ == '__main__':
     startScraping(args.subreddit, after, before)
 
   # Save results 
-  saveResult(args.filename)
+  saveResult(args.filename, data_dict)
