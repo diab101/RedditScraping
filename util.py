@@ -69,28 +69,32 @@ def retrievePostIds(filename, save=False, savefile='post_ids.json', col_name='po
   return up_id
 
 
-def saveResult(filename, data_dict):
+def saveResult(filename, df):
   '''
-  Saves the collected data, in form of dictionary, to a csv file
+  Saves the collected data to a csv file
   '''
 
-  print("Save results in file: ", filename)
+  print("Saving results in csv and excel format, file name: ", filename)
   try:
-    df = pd.DataFrame(data_dict)
     df.to_csv(filename + ".csv")
     print("Data saved in " + filename + ".csv")
+  except Exception as e:
+    print("Error saving in csv format .. Message:\n", e)
+
+  try:
     df.to_excel(filename + ".xlsx")
     print("Data saved in " + filename + ".xlsx")
-
-    ''' # this is the proper way to save
-    if filename.endswith(".csv"):
-      df.to_csv(filename)
-    elif filename.endswith('xlsx'):
-      df.to_excel(filename)
-    else:
-      # General case .. uses csv for now
-      print("File extension is not supported, trying to save it as CSV")
-      df.to_csv(filename)
-    '''
   except Exception as e:
-    print("Error saving data .. Message:\n", e)
+    print("Error saving excel format .. Message:\n", e)
+
+
+def mergeCSV(f1, f2, remove_duplicate=False, col_name='post_id'):
+  '''
+  Merges two csv files, saves the output 
+  '''
+  df1 = pd.read_csv(f1)
+  df2 = pd.read_csv(f2)
+  df = pd.concat([df1, df2])
+  if remove_duplicate:
+    df = df.drop_duplicates([col_name])
+  df.to_csv("merged.csv")
