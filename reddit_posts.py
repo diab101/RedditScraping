@@ -35,8 +35,7 @@ def getPostPushshiftData(subreddit, after, before, query, size):
   else:
     url = 'https://api.pushshift.io/reddit/search/submission/?size='+str(size)+'&after='+str(after)+'&before='+str(before)+'&subreddit='+str(subreddit)
 
-  #print("Requesting data from URL: \n", url)
-  #Request URL
+  # Send URL request
   while True:
     try:
       r = requests.get(url)
@@ -99,7 +98,7 @@ def collectSubData(subm):
   data_dict['remove_reason'] = remove_reason
 
 
-def startScraping(sub, after, before, query=None, size=500): # max:500
+def startScraping(sub, after, before, query=None, size=1000): # max:250 from API, try to catch more
   '''
   Starting point of data scraping
   '''
@@ -116,15 +115,12 @@ def startScraping(sub, after, before, query=None, size=500): # max:500
     after = data[-1]['created_utc']
     # wait 1 seconds, abiding Reddit rules (https://github.com/reddit-archive/reddit/wiki/API#rules)
     time.sleep(1)
-    #break
+    print("Records collected so far: ", len(data_dict["post_id"]))
   
   # fill repeated columns efficiently 
   fillMissingColumns('subreddit', sub)
   if query is not None:
     fillMissingColumns('query', query)
-
-  # Show statistics
-  statistics(sub, query)
 
 
 def fillMissingColumns(col_name, col_content):
@@ -142,14 +138,12 @@ def statistics(sub, query):
   Prints basic statistics of collected data
   '''
   print("*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-")
-
   print("Session data statistics: \n")
   print("Posts scraped: {}".format(len(data_dict['post_id'])))
   print("From: {}".format(str(stampToDateObj(data_dict['stamp'][0]))))
   print("Until: {}".format(str(stampToDateObj(data_dict['stamp'][-1]))))
   print("Subreddit: {}".format(sub))
   print("Filtered by: \"{}\"".format(query))
-
   print("*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-")
 
 
@@ -197,10 +191,20 @@ if __name__ == '__main__':
     terms = str(args.query).split(',')
     for query in terms:
       print("Collecting data filtered by [{}]".format(query))
-      startScraping(args.subreddit, query, after, before)
+      startScraping(args.subreddit, after, before, query)
   else:
-    print("Collecting data from [{}]".format(args.subbreddit))
+    print("Collecting data from [{}]".format(args.subreddit))
     startScraping(args.subreddit, after, before)
 
-  # Save results 
-  saveResult(args.filename, data_dict)
+  if len(data_dict['post_id']) == 0:
+    print("No data was collected. Try changing filtering parameters.")
+  else:
+    # Convert data from dictionary form to dataframe
+    df = pd.DataFrame(data_dict)
+    # remove duplicates based on ID
+    df = df.drop_duplicates(['post_id'])
+    # Save results 
+    saveResult(args.filename, df)
+
+    # Show statistics
+    statistics(args.subreddit, query)
