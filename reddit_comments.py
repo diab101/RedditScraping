@@ -3,7 +3,7 @@ import argparse
 import requests
 import time
 from util import *
-
+from tqdm import tqdm
 
 
 # Global dictionary to store the collected data
@@ -55,6 +55,7 @@ def buildCommentsUrl(comm_ids):
     url = "https://api.pushshift.io/reddit/comment/search?ids=" + ids
     return url
 
+
 def collectCommData(comment, pid):
     '''
     Extract fields of interest from each comment, store results in 'data_dict'
@@ -102,7 +103,7 @@ def startScraping(inputfile):
     # Obtain a list of unique post IDs
     posts_ids = retrievePostIds(inputfile)
 
-    for pid in posts_ids:
+    for pid in tqdm(posts_ids, desc="Progress"):
         url1 = buildCommentIDsUrl(pid)
         comm_ids = requestDataFromUrl(url1)
         url2 = buildCommentsUrl(comm_ids)
@@ -110,6 +111,21 @@ def startScraping(inputfile):
         for comment in comm_list:
             collectCommData(comment, pid)
 
+
+def statistics():
+  '''
+  Prints basic statistics of collected data
+  '''
+  print("*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-")
+
+  print("Session data statistics: \n")
+  #print("Posts Considered: {}".format(len(data_dict['post_id'])))
+  print("Comments scraped: {}".format(len(data_dict['post_id'])))
+  print("From: {}".format(str(stampToDateObj(data_dict['stamp'][0]))))
+  print("Until: {}".format(str(stampToDateObj(data_dict['stamp'][-1]))))
+  print("Subreddit: {}".format(data_dict['subreddit'][0]))
+
+  print("*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-")
 
 
 if __name__ == '__main__':
@@ -124,5 +140,14 @@ if __name__ == '__main__':
   print("Arguments parsed .. Start scraping data \n\n")
   startScraping(args.input)
 
+  # Convert data from dictionary form to dataframe
+  df = pd.DataFrame(data_dict)
+
+  # remove duplicates based on ID
+  df = df.drop_duplicates(['comm_id'])
+
   # Save results 
-  saveResult(args.output, data_dict)
+  saveResult(args.output, df)
+
+  # show stats of collected data
+  statistics()
